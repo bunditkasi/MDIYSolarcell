@@ -1,0 +1,38 @@
+# --- Secrets: never commit ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+vault-token
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# --- Node / Next.js ---
+node_modules/
+.next/
+out/
+.pnpm-store/
+npm-debug.log*
+yarn-error.log*
+
+# --- Docker / data ---
+pgdata/
+redis-data/
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Build info ---
+tsconfig.tsbuildinfo

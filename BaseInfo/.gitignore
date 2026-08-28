@@ -1,0 +1,6 @@
+# The workbook carries branch addresses and CapEx figures — not for the repo.
+*.xlsx
+*.xls
+*.csv
+~$*
+!README.md

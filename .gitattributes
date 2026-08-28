@@ -1,0 +1,31 @@
+# Line endings.
+#
+# This repo is authored on Windows and RUN inside Linux containers. A shell
+# script or entrypoint checked out with CRLF fails in the container with
+# "no such file or directory" — an error that points at the file rather than at
+# the line ending, and costs an afternoon the first time anyone hits it.
+#
+# So: normalise to LF in the repository, and force LF in the working copy for
+# everything Docker executes or reads.
+
+* text=auto
+
+*.sh        text eol=lf
+*.py        text eol=lf
+*.sql       text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.json      text eol=lf
+*.ts        text eol=lf
+*.tsx       text eol=lf
+*.css       text eol=lf
+*.md        text eol=lf
+Dockerfile* text eol=lf
+.env.example text eol=lf
+
+# Binary — never touch, never diff.
+*.xlsx  binary
+*.png   binary
+*.jpg   binary
+*.ico   binary
+*.woff2 binary

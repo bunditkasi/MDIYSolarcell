@@ -1,0 +1,216 @@
+# =============================================================================
+# MR.DIY Thailand — Enterprise Solar PV Monitoring System
+# Phase 1 (MVP) local stack.
+#
+#   cp .env.example .env      # then edit .env
+#   docker compose up -d --build
+#
+# Phase 2 note: `db` and `redis` are Phase-1-only conveniences. When corporate
+# IT points the backend at the enterprise SQL server, those two services are
+# removed and only DATABASE_URL / AUTH_MODE change — no application code does.
+# =============================================================================
+
+name: mrdiy-solar
+
+# --- Shared definition for the three services built from ./backend ----------
+x-backend-common: &backend-common
+  build:
+    context: ./backend
+    dockerfile: Dockerfile
+    target: dev
+  env_file:
+    - .env
+  environment:
+    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    REDIS_URL: redis://redis:6379/0
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  networks:
+    - solarnet
+  restart: unless-stopped
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16 + TimescaleDB — metadata (relational) and telemetry (hypertables)
+  # ---------------------------------------------------------------------------
+  db:
+    image: timescale/timescaledb:2.17.2-pg16
+    container_name: solar_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      # Fail fast instead of silently creating a trust-auth database.
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Scripts here run ONCE, in filename order, only when pgdata is empty.
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+      # Seed data is NOT auto-applied. Load it deliberately:
+      #   docker compose exec db psql -U $POSTGRES_USER -d $POSTGRES_DB -f /seed/01_tariffs.sql
+      - ./db/seed:/seed:ro
+    healthcheck:
+      # Both -U and -d matter: pg_isready succeeds against the wrong database otherwise.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - solarnet
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Redis — ingestion job queue (arq) + Solcast response cache
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7.4-alpine
+    container_name: solar_redis
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks:
+      - solarnet
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # FastAPI backend
+  # ---------------------------------------------------------------------------
+  backend:
+    <<: *backend-common
+    container_name: solar_backend
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    ports:
+      - "${BACKEND_HOST_PORT:-8000}:8000"
+    volumes:
+      - ./backend:/app
+      # Read-only: the API must never modify the operations workbook.
+      - ./BaseInfo:/BaseInfo:ro
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=3).status==200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # ---------------------------------------------------------------------------
+  # BaseInfo importer — watches ./BaseInfo for a new Solar Report.xlsx and
+  # imports it into the database.
+  #
+  # Runs with --apply, so it writes unattended. That is safe only because the
+  # reader rejects any row that fails validation before the importer sees it,
+  # and because the importer never deletes a store. Watch its log to see what
+  # each import changed:  docker compose logs -f importer
+  # ---------------------------------------------------------------------------
+  importer:
+    <<: *backend-common
+    container_name: solar_importer
+    command:
+      ["python", "-m", "app.baseinfo", "--watch", "--apply", "--dir", "/BaseInfo"]
+    volumes:
+      - ./backend:/app
+      - ./BaseInfo:/BaseInfo:ro
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # ---------------------------------------------------------------------------
+  # Ingestion worker — polls OEM APIs on each adapter's sync_interval_min,
+  # then runs string-variance and performance-ratio analytics.
+  # ---------------------------------------------------------------------------
+  worker:
+    <<: *backend-common
+    container_name: solar_worker
+    command: ["arq", "app.ingestion.worker.WorkerSettings"]
+    volumes:
+      - ./backend:/app
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ---------------------------------------------------------------------------
+  # Playwright scraper — legacy sites with no OEM API.
+  # Separate service because the Playwright base image is ~2GB and browser
+  # processes need far more memory than the API container.
+  # ---------------------------------------------------------------------------
+  scraper:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.scraper
+    container_name: solar_scraper
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+    command: ["arq", "app.ingestion.scrapers.worker.WorkerSettings"]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    # Chromium needs more than Docker's default 64MB of shared memory or it
+    # crashes on content-heavy dashboards.
+    shm_size: 1gb
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+    networks:
+      - solarnet
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Next.js frontend — MapLibre / OpenFreeMap GIS dashboard
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: dev
+    container_name: solar_frontend
+    env_file:
+      - .env
+    ports:
+      - "${FRONTEND_HOST_PORT:-3000}:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - solarnet
+    restart: unless-stopped
+
+networks:
+  solarnet:
+    driver: bridge
+
+volumes:
+  pgdata:
+  redisdata:

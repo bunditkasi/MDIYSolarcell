@@ -1,0 +1,28 @@
+# =============================================================================
+# Playwright scraper worker — legacy sites without an OEM API.
+#
+# Built separately from Dockerfile because this base image ships Chromium and
+# its system libraries (~2GB). Keeping it out of the API image means the API
+# stays small and deploys fast.
+# =============================================================================
+
+FROM mcr.microsoft.com/playwright/python:v1.49.0-noble
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+COPY pyproject.toml ./
+RUN mkdir -p app && touch app/__init__.py \
+ && pip install -e ".[scraper]"
+
+COPY . .
+
+# The base image provides the `pwuser` account with browsers already installed
+# under its home directory.
+USER pwuser
+
+CMD ["arq", "app.ingestion.scrapers.worker.WorkerSettings"]

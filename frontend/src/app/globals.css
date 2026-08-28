@@ -1,0 +1,179 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===========================================================================
+   Design tokens.
+
+   The dark surface language is taken from the Atmoce Cloud portal the
+   operations team already uses, so the switch feels familiar on day one. The
+   accent is MR.DIY's own yellow rather than Atmoce's emerald. Values are
+   refined rather than copied outright:
+
+   - Atmoce's body text (#E4E9F2) on its card surface (#202329) lands at about
+     12:1, but its secondary text (#6C6E73) on the same surface is roughly 3:1
+     — under the 4.5:1 minimum for body copy. Ours is lifted to #98A2B3.
+   - The accent is MR.DIY yellow (#FFB700) rather than Atmoce's emerald. Yellow
+     is a light colour, so anything filled with it MUST carry dark text:
+     white on #FFB700 is about 1.8:1 and effectively unreadable, while
+     near-black is about 10.8:1. That is what --on-accent exists for; never put
+     white on an accent fill.
+   - --warn had to move with it. The old amber (#F0A020) sits ~3 degrees of hue
+     from #FFB700, so an active nav tab and a warning badge became almost the
+     same colour. Warning is now orange, which keeps the safety encoding
+     readable as something distinct from "this is the selected thing".
+   - Status colours here are the ones used by the map legend, so a pin and a
+     table row never disagree about what "warning" looks like.
+   =========================================================================== */
+
+:root {
+  /* Surfaces, darkest to lightest */
+  --bg: #101215;
+  --surface: #181b20;
+  --surface-2: #202329;
+  --surface-3: #292c33;
+  --border: #2a2e38;
+  --border-strong: #3a3f4b;
+
+  /* Text */
+  --text: #e4e9f2;
+  --text-muted: #98a2b3;
+  --text-faint: #6c707a;
+
+  /* Accent — MR.DIY yellow */
+  --accent: #ffb700;
+  /* Lighter tone for text and thin strokes on dark surfaces (11:1 on --surface-2). */
+  --accent-bright: #ffd166;
+  --accent-dim: #4a3400;
+  /* Text and icons placed ON an accent fill. Dark, because the accent is light. */
+  --on-accent: #101215;
+
+  /* Status — mirrors src/lib/pr-status.ts */
+  --ok: #22c55e;
+  /* Orange, not amber: amber collided with the yellow accent. */
+  --warn: #f97316;
+  --crit: #ef4444;
+  --unknown: #64748b;
+  --info: #3b82f6;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-feature-settings: "tnum" 0;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Numbers in tables and stat tiles must line up column-wise; proportional
+     digits make a column of figures impossible to scan down. */
+  .tabular,
+  td.num,
+  .stat-value {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background: var(--accent-dim);
+    color: var(--text);
+  }
+
+  /* Dark scrollbars — the browser default light track is jarring against
+     these surfaces and is the first thing that makes a dark UI look unfinished. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: #4a5060;
+    background-clip: content-box;
+  }
+
+  /* Visible keyboard focus. Operations staff drive tables from the keyboard,
+     and the default dark-on-dark outline is effectively invisible here. */
+  :focus-visible {
+    outline: 2px solid var(--accent-bright);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border;
+    background: var(--surface-2);
+    border-color: var(--border);
+  }
+
+  .card-hover {
+    transition: border-color 140ms ease, background-color 140ms ease;
+  }
+
+  .card-hover:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-3);
+  }
+}
+
+/* --- MapLibre popup, restyled for the dark shell ------------------------- */
+.store-tooltip .maplibregl-popup-content {
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.625rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  box-shadow: 0 16px 40px -12px rgb(0 0 0 / 0.7);
+}
+
+.store-tooltip .maplibregl-popup-tip {
+  border-top-color: var(--border-strong);
+  border-bottom-color: var(--border-strong);
+}
+
+/* The tooltip tracks the cursor; letting it take pointer events makes the pin
+   underneath un-hoverable and the tooltip flickers on and off. */
+.store-tooltip {
+  pointer-events: none;
+}
+
+.maplibregl-ctrl-group {
+  background: var(--surface-2) !important;
+  border: 1px solid var(--border) !important;
+}
+
+.maplibregl-ctrl-group button + button {
+  border-top-color: var(--border) !important;
+}
+
+.maplibregl-ctrl-group button span {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+.maplibregl-ctrl-attrib {
+  background: rgb(16 18 21 / 0.85) !important;
+}
+
+.maplibregl-ctrl-attrib a {
+  color: var(--text-muted) !important;
+}
