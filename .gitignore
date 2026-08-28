@@ -28,6 +28,12 @@ yarn-error.log*
 pgdata/
 redis-data/
 
+# --- Claude Code: machine-local settings ---
+# settings.json is shared project config and belongs in the repo.
+# settings.local.json holds one developer's own permission grants — committing
+# it would hand everyone who clones the approvals this machine chose to give.
+.claude/settings.local.json
+
 # --- Editors / OS ---
 .vscode/
 .idea/
