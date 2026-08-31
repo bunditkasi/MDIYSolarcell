@@ -198,21 +198,30 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
 // --------------------------------------------------------------------------
 
 /**
- * Load the fleet, falling back to generated data when the backend is down.
+ * Load the fleet.
  *
- * The fallback is explicit and reported to the caller, never silent: a map
- * quietly showing 200 invented stores is worse than an empty one, because
- * nobody notices the data is fictional.
+ * Generated data is only ever substituted when it was ASKED for — the
+ * `?mock=1` switch or NEXT_PUBLIC_USE_MOCK_DATA — or when a development build
+ * cannot reach its backend, which is the case the generator was written for.
+ *
+ * A production build never fabricates. `process.env.NODE_ENV` is inlined at
+ * build time, so on a hosted deployment the generator is not merely skipped but
+ * absent from the bundle. A map quietly showing 200 invented MR.DIY sites is
+ * worse than an empty one: the banner saying so does not survive a screenshot,
+ * and nothing about the pins themselves looks wrong.
  */
 export async function loadFleet(
   useMock: boolean,
-): Promise<{ data: MapResponse; source: "api" | "mock"; error?: string }> {
+): Promise<{ data: MapResponse | null; source: "api" | "mock"; error?: string }> {
   if (useMock) return { data: generateMockFleet(), source: "mock" };
 
   try {
     return { data: await fetchMapPins(), source: "api" };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return { data: generateMockFleet(), source: "mock", error: message };
+    if (process.env.NODE_ENV === "development") {
+      return { data: generateMockFleet(), source: "mock", error: message };
+    }
+    return { data: null, source: "api", error: message };
   }
 }

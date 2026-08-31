@@ -139,6 +139,15 @@ export default function MapPage() {
         )}
       </header>
 
+      {/* A production build reaches this with data === null rather than with
+          invented stores, so the map is empty and the reason is stated. */}
+      {!loading && !fleet && apiError && (
+        <div className="pointer-events-auto absolute inset-x-0 top-[5.25rem] z-10 mx-auto w-fit max-w-lg rounded-lg border border-status-crit/40 bg-status-crit/15 px-3 py-2 text-center text-2xs font-medium text-status-crit shadow-lg">
+          Backend unreachable ({apiError}). No branches can be shown — this map
+          does not substitute sample data.
+        </div>
+      )}
+
       {/* Data-source banner. Mock data is never shown silently — a map full of
           invented stores that looks real is worse than an empty one. */}
       {!loading && source === "mock" && (
