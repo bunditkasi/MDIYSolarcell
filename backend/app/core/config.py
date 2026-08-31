@@ -42,6 +42,17 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     api_v1_prefix: str = "/api/v1"
     cors_origins: str = "http://localhost:3000"
+    #: Regex for origins that cannot be listed exactly.
+    #:
+    #: Vercel mints a new hostname for every deployment
+    #: (solarcell-<hash>-<account>.vercel.app), so an exact list would go stale
+    #: on each deploy. Anchored with \Z rather than $ — $ also matches before a
+    #: trailing newline, which would let "https://evil.com\n" through.
+    #:
+    #: Empty disables it. Keep it as tight as the hosting allows: this backend
+    #: runs with AUTH_MODE=mock, so any origin that reaches it can read every
+    #: branch's address, CapEx and generation.
+    cors_origin_regex: str = r"https://[a-z0-9-]+\.vercel\.app\Z"
 
     # -- Database ------------------------------------------------------------
     # Phase 2: corporate IT repoints this at the enterprise SQL server and
